@@ -15,7 +15,8 @@
 
   // Nilai slider — null berarti "semua tahun"
   let sliderValue = $state<number>(maxYear);
-  let showAll = $state(false);
+  // Sinkronkan initial state dengan selectedYear dari parent
+  let showAll = $state(selectedYear === null);
 
   function onSliderInput(e: Event) {
     sliderValue = Number((e.target as HTMLInputElement).value);

@@ -191,6 +191,7 @@
             lineWidthMinPixels: 0.5,
             lineWidthMaxPixels: 2,
             pickable: true,
+            pickingRadius: 5, // Fix BUG-03: perluas area klik agar polygon kecil lebih mudah dipilih
             autoHighlight: true,
             highlightColor: [255, 255, 0, 100],
             updateTriggers: {
@@ -236,6 +237,7 @@
             getLineColor: HEATMAP_LINE_COLOR,
             lineWidthMinPixels: 0.3,
             pickable: true,
+            pickingRadius: 5, // Fix BUG-03: perluas area klik untuk heatmap juga
             autoHighlight: true,
             highlightColor: [255, 255, 255, 60],
             updateTriggers: {
