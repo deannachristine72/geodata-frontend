@@ -65,7 +65,7 @@
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     deckOverlay = new MapboxOverlay({
-      interleaved: false,
+      interleaved: true,
       layers: [],
       onClick: (info) => {
         if (!info.picked) {
