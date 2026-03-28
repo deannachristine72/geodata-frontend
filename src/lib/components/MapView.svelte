@@ -429,8 +429,8 @@
 
   <!-- Info Panel — Klik Feature -->
   {#if pickedFeature}
-    <div class="absolute bottom-14 left-4 z-10 w-72
-                bg-gray-900/95 text-white rounded-xl shadow-xl overflow-hidden">
+    <div class="absolute z-10 bottom-0 left-0 right-0 w-full rounded-t-xl sm:bottom-14 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl max-h-[50vh] overflow-y-auto
+                bg-gray-900/95 text-white shadow-xl">
       <!-- Header -->
       <div class="flex items-center justify-between px-4 py-3
                   {pickedFeature.type === 'heatmap' ? 'bg-teal-700/80' : 'bg-teal-600/80'}">
