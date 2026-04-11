@@ -46,3 +46,25 @@ export function polygonFillColor(area_km2: number): [number, number, number, num
 
 export const POLYGON_LINE_COLOR: [number, number, number, number] = [255, 80, 0, 220];
 export const HEATMAP_LINE_COLOR: [number, number, number, number] = [255, 255, 255, 60];
+
+// ─── C2: Warna centroid berdasarkan severity area_km² ────────────────────────
+// < 1 km²    → Kuning   (rendah)
+// 1–10 km²   → Oranye   (sedang)
+// 10–50 km²  → Merah    (tinggi)
+// > 50 km²   → Merah tua (sangat tinggi)
+export function centroidSeverityColor(area_km2: number, alpha = 200): [number, number, number, number] {
+  // Guard: nilai invalid/negatif/NaN → kelas terkecil (kuning)
+  if (!Number.isFinite(area_km2) || area_km2 <= 0) return [252, 211, 77, alpha];
+  if (area_km2 < 1)   return [252, 211, 77,  alpha]; // kuning
+  if (area_km2 < 10)  return [249, 115, 22,  alpha]; // oranye
+  if (area_km2 < 50)  return [239, 68,  68,  alpha]; // merah
+  return               [159, 18,  57,  alpha];        // merah tua / crimson
+}
+
+// C1: Kelas severity untuk legenda — size field menggantikan ternary string-matching
+export const CENTROID_SEVERITY_CLASSES = [
+  { label: '< 1 km²',    color: '#FCD34D', desc: 'Kecil',        size: 8  },
+  { label: '1–10 km²',   color: '#F97316', desc: 'Sedang',       size: 11 },
+  { label: '10–50 km²',  color: '#EF4444', desc: 'Besar',        size: 14 },
+  { label: '> 50 km²',   color: '#9F1239', desc: 'Sangat Besar', size: 18 },
+] as const;

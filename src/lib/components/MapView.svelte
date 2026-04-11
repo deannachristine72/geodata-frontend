@@ -5,7 +5,7 @@
   import { MapboxOverlay } from '@deck.gl/mapbox';
   import { GeoJsonLayer, ScatterplotLayer } from 'deck.gl';
   import { fetchHeatmap, fetchCentroids, fetchBoundary } from '$lib/api';
-  import { intensityToRgba, HEATMAP_LINE_COLOR } from '$lib/colorScale';
+  import { intensityToRgba, HEATMAP_LINE_COLOR, centroidSeverityColor, CENTROID_SEVERITY_CLASSES } from '$lib/colorScale';
   import type { LayerMode, PickedFeature, KotaHeatmapProperties, CentroidPoint, PolygonProperties } from '$lib/types';
 
   // ─── Props (Svelte 5 runes) ─────────────────────────────────────────────────
@@ -43,9 +43,8 @@
   const PMTILES_URL = 'https://deannachristine72.github.io/indonesia-pmtiles/indonesia.pmtiles';
   const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
 
-  // Warna centroid — teal seperti referensi
-  const CENTROID_COLOR: [number, number, number, number] = [0, 148, 136, 190];
-  const CENTROID_HIGHLIGHT: [number, number, number, number] = [255, 200, 0, 220];
+  // Warna highlight centroid saat hover/klik
+  const CENTROID_HIGHLIGHT: [number, number, number, number] = [255, 255, 255, 240];
 
   // ─── Setup MapLibre + deck.gl ────────────────────────────────────────────────
   onMount(async () => {
@@ -261,13 +260,15 @@
             radiusUnits: 'meters',
             radiusMinPixels: 3,
             radiusMaxPixels: 25,
-            getFillColor: CENTROID_COLOR,
+            // C2: Warna berdasarkan severity area_km²
+            getFillColor: (d: CentroidPoint) => centroidSeverityColor(d[2]),
             pickable: true,
             pickingRadius: 5,
             autoHighlight: true,
             highlightColor: CENTROID_HIGHLIGHT,
             updateTriggers: {
               getPosition: selectedYear,
+              getFillColor: selectedYear,
             },
           }),
         ],
@@ -460,6 +461,40 @@
       <div class="flex justify-between text-gray-400">
         <span>Rendah</span>
         <span>Tinggi</span>
+      </div>
+    </div>
+  {/if}
+
+  <!-- C1: Centroid Legend — ukuran & warna severity -->
+  {#if layerMode === 'centroids'}
+    <div class="absolute bottom-4 right-4 z-10
+                bg-gray-900/95 backdrop-blur rounded-xl px-3 py-3 shadow-xl
+                text-xs text-white w-44">
+      <div class="font-semibold mb-2.5 text-gray-300 tracking-wide uppercase text-[10px]">
+        Luas Area Deforestasi
+      </div>
+      <div class="space-y-1.5">
+        {#each CENTROID_SEVERITY_CLASSES as cls}
+          <div class="flex items-center gap-2">
+            <!-- Dot ukuran bervariasi sesuai kelas -->
+            <span
+              class="rounded-full shrink-0"
+              style="
+                width:  {cls.size}px;
+                height: {cls.size}px;
+                background-color: {cls.color};
+                box-shadow: 0 0 4px {cls.color}88;
+              "
+            ></span>
+            <div class="flex flex-col leading-tight">
+              <span class="text-white font-medium">{cls.desc}</span>
+              <span class="text-gray-400">{cls.label}</span>
+            </div>
+          </div>
+        {/each}
+      </div>
+      <div class="mt-2.5 pt-2 border-t border-gray-700 text-gray-500 text-[10px] leading-tight">
+        Ukuran titik ∝ luas area
       </div>
     </div>
   {/if}
