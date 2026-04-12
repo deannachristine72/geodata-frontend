@@ -269,7 +269,6 @@
     if (!map || !map.getSource('selected-boundary')) return;
 
     if (!hascCode) {
-      // Hapus boundary
       (map.getSource('selected-boundary') as maplibregl.GeoJSONSource).setData({
         type: 'FeatureCollection',
         features: [],
@@ -284,6 +283,42 @@
       );
     } catch (err) {
       console.error('Gagal memuat boundary kota:', err);
+    }
+  }
+
+  // ─── Update Boundary untuk pulau (gabungan polygon per provinsi) ─────────────
+  async function updateIslandBoundary(provinces: string[]) {
+    if (!map || !map.getSource('selected-boundary')) return;
+
+    // Clear dulu
+    (map.getSource('selected-boundary') as maplibregl.GeoJSONSource).setData({
+      type: 'FeatureCollection', features: [],
+    });
+
+    if (provinces.length === 0) return;
+
+    try {
+      // Gunakan heatmap cache — polygon geometry tiap kab/kota sudah ada di sini
+      const cacheKey = selectedYear != null ? String(selectedYear) : 'all';
+      if (!heatmapCache[cacheKey]) {
+        const fetched = await fetchHeatmap(selectedYear);
+        if (fetched === null) return;
+        heatmapCache[cacheKey] = fetched;
+      }
+      const data = heatmapCache[cacheKey] as {
+        features: Array<{ type?: string; geometry: object; properties: KotaHeatmapProperties }>;
+      };
+
+      const filteredFeatures = data.features
+        .filter(f => provinces.includes(f.properties.provinsi) && f.geometry)
+        .map(f => ({ type: 'Feature' as const, geometry: f.geometry, properties: f.properties }));
+
+      (map.getSource('selected-boundary') as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: filteredFeatures,
+      });
+    } catch (err) {
+      console.error('Gagal memuat boundary pulau:', err);
     }
   }
 
@@ -574,9 +609,17 @@
     }
   });
 
-  // Reaktif: Update boundary saat selectedBoundaryHasc berubah
+  // Reaktif: Update boundary — kota (hasc) atau pulau (provinsi)
   $effect(() => {
-    updateBoundary(selectedBoundaryHasc);
+    const hasc = selectedBoundaryHasc;
+    const provinces = selectedProvinces;
+    if (hasc) {
+      updateBoundary(hasc);
+    } else if (provinces.length > 0) {
+      updateIslandBoundary(provinces);
+    } else {
+      updateBoundary(null); // clear
+    }
   });
 </script>
 
