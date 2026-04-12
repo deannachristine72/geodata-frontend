@@ -21,6 +21,13 @@
   let allHeatmapKota = $state<KotaHeatmapProperties[]>([]);
   let selectedProvinces = $state<string[]>([]);
 
+  // Filter kota spesifik (untuk heatmap + centroid kota search)
+  let selectedKotaHasc = $state<string | null>(null);
+  let selectedKotaBbox = $state<[number, number, number, number] | null>(null);
+
+  // Untuk reset search bar dari luar
+  let searchValue = $state('');
+
   // Data tidak dimuat sampai user memilih dari search
   let dataEnabled = $state(false);
 
@@ -35,18 +42,16 @@
     const modeParam = params.get('mode');
     if (modeParam === 'heatmap' || modeParam === 'centroids') layerMode = modeParam;
 
-    // Fetch metadata (years + kota list) — tidak trigger load peta
+    // Fetch metadata saja — tidak trigger load peta
     const [yearsData, kotaData] = await Promise.all([
       fetchYears().catch(() => []),
       fetchSearchKota().catch(() => []),
     ]);
     years = yearsData;
     kotaList = kotaData;
-
-    // Stats hanya dimuat saat ada data (dataEnabled)
   });
 
-  // ─── Fetch Stats saat filter berubah ────────────────────────────────────────
+  // ─── Fetch Stats ─────────────────────────────────────────────────────────────
   async function loadStats() {
     statsLoading = true;
     try {
@@ -58,39 +63,49 @@
     }
   }
 
+  // ─── Reset semua state ke kondisi awal ───────────────────────────────────────
+  function handleReset() {
+    searchValue = '';
+    selectedKota = null;
+    selectedBoundaryHasc = null;
+    selectedProvinces = [];
+    selectedKotaHasc = null;
+    selectedKotaBbox = null;
+    dataEnabled = false;
+    stats = null;
+  }
+
   // ─── Handler: Search (island atau kota) ─────────────────────────────────────
   function handleSearch(result: KotaSearchItem | IslandGroup | null) {
     if (result === null) {
-      // User clear search → reset semua
-      selectedKota = null;
-      selectedBoundaryHasc = null;
-      selectedProvinces = [];
-      dataEnabled = false;
+      handleReset();
       return;
     }
 
     if ('type' in result && result.type === 'island') {
-      // Pilih pulau/wilayah
       const island = result as IslandGroup;
       selectedKota = null;
       selectedBoundaryHasc = null;
+      selectedKotaHasc = null;
+      selectedKotaBbox = null;
       selectedProvinces = island.provinces;
       dataEnabled = true;
       mapView?.flyTo(island.center, island.zoom);
       loadStats();
     } else {
-      // Pilih kota spesifik
       const kota = result as KotaSearchItem;
       selectedKota = kota;
       selectedBoundaryHasc = kota.hasc_code;
-      // Jangan reset selectedProvinces — tetap filter pulau yang aktif (jika ada)
+      selectedKotaHasc = kota.hasc_code;
+      selectedKotaBbox = kota.bbox;
+      selectedProvinces = []; // kota filter menggantikan province filter
       dataEnabled = true;
       mapView?.flyTo(kota.centroid, 10);
       loadStats();
     }
   }
 
-  // ─── Reaktif: Reload stats saat tahun berubah (hanya jika data aktif) ───────
+  // ─── Reaktif: Reload stats saat tahun berubah ───────────────────────────────
   $effect(() => {
     const _year = selectedYear;
     if (dataEnabled) loadStats();
@@ -112,7 +127,10 @@
       bind:allHeatmapKota
       {selectedBoundaryHasc}
       {selectedProvinces}
+      {selectedKotaHasc}
+      {selectedKotaBbox}
       {dataEnabled}
+      onReset={handleReset}
     />
   </div>
 
@@ -123,6 +141,7 @@
       bind:layerMode
       bind:selectedKota
       bind:selectedProvinces
+      bind:searchValue
       {years}
       {kotaList}
       {topKota}

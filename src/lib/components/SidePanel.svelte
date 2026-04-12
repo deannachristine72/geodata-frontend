@@ -19,6 +19,7 @@
     statsLoading = false,
     selectedKota = $bindable<KotaSearchItem | null>(null),
     selectedProvinces = $bindable<string[]>([]),
+    searchValue = $bindable(''),
     onSelectKota,
   }: {
     selectedYear: number | null;
@@ -32,6 +33,7 @@
     statsLoading: boolean;
     selectedKota: KotaSearchItem | null;
     selectedProvinces: string[];
+    searchValue: string;
     onSelectKota: (result: KotaSearchItem | IslandGroup | null) => void;
   } = $props();
 
@@ -145,7 +147,7 @@
   <!-- Scrollable content -->
   <div class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
     <!-- Search -->
-    <SearchBar {kotaList} onSelect={onSelectKota} />
+    <SearchBar {kotaList} bind:searchValue onSelect={onSelectKota} />
 
     <!-- Divider -->
     <div class="border-t border-gray-800"></div>

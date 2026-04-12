@@ -4,34 +4,35 @@
 
   let {
     kotaList = [],
+    searchValue = $bindable(''),
     onSelect,
   }: {
     kotaList: KotaSearchItem[];
+    searchValue: string;
     onSelect: (result: KotaSearchItem | IslandGroup | null) => void;
   } = $props();
 
-  let query = $state('');
   let isFocused = $state(false);
   let selectedIndex = $state(-1);
 
-  // Island entries yang cocok dengan query (atau semua jika query kosong)
+  // Island entries yang cocok dengan searchValue (atau semua jika kosong)
   const filteredIslands = $derived(
-    query.length === 0
+    searchValue.length === 0
       ? ISLAND_GROUPS
       : ISLAND_GROUPS.filter(g =>
-          g.name.toLowerCase().includes(query.toLowerCase()) ||
-          g.subtitle.toLowerCase().includes(query.toLowerCase())
+          g.name.toLowerCase().includes(searchValue.toLowerCase()) ||
+          g.subtitle.toLowerCase().includes(searchValue.toLowerCase())
         )
   );
 
-  // Kota entries — hanya muncul saat ada query
+  // Kota entries — hanya muncul saat ada searchValue
   const filteredKota = $derived(
-    query.length < 1
+    searchValue.length < 1
       ? []
       : kotaList
           .filter(k =>
-            k.kota_name.toLowerCase().includes(query.toLowerCase()) ||
-            k.provinsi.toLowerCase().includes(query.toLowerCase())
+            k.kota_name.toLowerCase().includes(searchValue.toLowerCase()) ||
+            k.provinsi.toLowerCase().includes(searchValue.toLowerCase())
           )
           .slice(0, 6)
   );
@@ -44,14 +45,14 @@
   const allResults = $derived([...filteredIslands, ...filteredKota]);
 
   function handleSelectIsland(island: IslandGroup) {
-    query = island.name;
+    searchValue = island.name;
     isFocused = false;
     selectedIndex = -1;
     onSelect(island);
   }
 
   function handleSelectKota(kota: KotaSearchItem) {
-    query = `${kota.kota_name}, ${kota.provinsi}`;
+    searchValue = `${kota.kota_name}, ${kota.provinsi}`;
     isFocused = false;
     selectedIndex = -1;
     onSelect(kota);
@@ -78,7 +79,7 @@
   }
 
   function handleClear() {
-    query = '';
+    searchValue = '';
     isFocused = false;
     selectedIndex = -1;
     onSelect(null);
@@ -93,13 +94,13 @@
     </svg>
     <input
       type="text"
-      bind:value={query}
+      bind:value={searchValue}
       onfocus={() => (isFocused = true)}
       onkeydown={handleKeydown}
       placeholder="Pilih pulau atau cari kota..."
       class="bg-transparent text-white text-sm w-full outline-none placeholder-gray-500"
     />
-    {#if query.length > 0}
+    {#if searchValue.length > 0}
       <button onclick={handleClear} class="text-gray-400 hover:text-white text-sm">
         ✕
       </button>
@@ -118,10 +119,9 @@
           Pilih Wilayah
         </div>
         {#each filteredIslands as island, i}
-          {@const idx = i}
           <button
             class="w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2
-                   {idx === selectedIndex ? 'bg-teal-700/40 text-white' : 'text-gray-300 hover:bg-gray-700'}"
+                   {i === selectedIndex ? 'bg-teal-700/40 text-white' : 'text-gray-300 hover:bg-gray-700'}"
             onmousedown={() => handleSelectIsland(island)}
           >
             <span class="text-base leading-none">
@@ -135,7 +135,7 @@
         {/each}
       {/if}
 
-      <!-- Kota results (only when typing) -->
+      <!-- Kota results -->
       {#if filteredKota.length > 0}
         <div class="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider
                     border-b border-gray-700/60 {filteredIslands.length > 0 ? 'border-t border-gray-700/60' : ''}">
@@ -157,10 +157,10 @@
     </div>
   {/if}
 
-  {#if isFocused && query.length >= 1 && filteredIslands.length === 0 && filteredKota.length === 0}
+  {#if isFocused && searchValue.length >= 1 && filteredIslands.length === 0 && filteredKota.length === 0}
     <div class="absolute top-full left-0 right-0 mt-1 bg-gray-800 rounded-lg shadow-xl
                 border border-gray-700 px-3 py-3 text-sm text-gray-400 z-50">
-      Tidak ditemukan "{query}"
+      Tidak ditemukan "{searchValue}"
     </div>
   {/if}
 </div>

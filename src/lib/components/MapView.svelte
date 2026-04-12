@@ -18,7 +18,10 @@
     topKota         = $bindable<KotaHeatmapProperties[]>([]),
     allHeatmapKota  = $bindable<KotaHeatmapProperties[]>([]),
     selectedProvinces = [] as string[],
+    selectedKotaHasc = null as string | null,
+    selectedKotaBbox = null as [number, number, number, number] | null,
     dataEnabled = false,
+    onReset = () => {},
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
@@ -28,7 +31,10 @@
     topKota: KotaHeatmapProperties[];
     allHeatmapKota: KotaHeatmapProperties[];
     selectedProvinces: string[];
+    selectedKotaHasc: string | null;
+    selectedKotaBbox: [number, number, number, number] | null;
     dataEnabled: boolean;
+    onReset: () => void;
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -287,17 +293,17 @@
     map.flyTo({ center, zoom, duration: 1500 });
   }
 
-  // ─── Load Data Berdasarkan Mode ───────────────────────────────────────────────
+  // ─── Load Data Berdasarkan Mode (digunakan oleh moveend) ─────────────────────
   function loadData() {
     if (layerMode === 'centroids') {
-      loadCentroids();
+      loadCentroids(); // moveend: selalu gunakan viewport saat ini
     } else {
       loadHeatmap();
     }
   }
 
   // ─── Fetch + Render Centroid Points ──────────────────────────────────────────
-  async function loadCentroids() {
+  async function loadCentroids(bboxOverride?: [number, number, number, number]) {
     if (!map || !deckOverlay) return;
 
     // H1: Bersihkan label kota saat beralih dari heatmap ke centroid
@@ -313,12 +319,13 @@
     dataAbort?.abort();
     dataAbort = new AbortController();
 
+    // Gunakan bboxOverride (kota dipilih) atau viewport saat ini
     const bounds = map.getBounds();
     const params = {
-      minLon: bounds.getWest(),
-      minLat: bounds.getSouth(),
-      maxLon: bounds.getEast(),
-      maxLat: bounds.getNorth(),
+      minLon: bboxOverride ? bboxOverride[0] : bounds.getWest(),
+      minLat: bboxOverride ? bboxOverride[1] : bounds.getSouth(),
+      maxLon: bboxOverride ? bboxOverride[2] : bounds.getEast(),
+      maxLat: bboxOverride ? bboxOverride[3] : bounds.getNorth(),
       year: selectedYear,
       limit: 8000,
     };
@@ -382,7 +389,8 @@
     hoveredCentroid = null;
     hoveredKota = null;
 
-    // H9: Baca selectedProvinces secara sinkron sebelum await agar $effect tracking bekerja
+    // H9: Baca filter secara sinkron sebelum await agar $effect tracking bekerja
+    const filterKotaHasc = selectedKotaHasc;
     const filterProvinces = selectedProvinces;
 
     const cacheKey = selectedYear != null ? String(selectedYear) : 'all';
@@ -400,10 +408,12 @@
         features: Array<{ geometry: { type: string; coordinates: unknown }; properties: KotaHeatmapProperties }>;
       };
 
-      // H9: Filter berdasarkan provinsi yang dipilih
-      const displayFeatures = filterProvinces.length > 0
-        ? data.features.filter(f => filterProvinces.includes(f.properties.provinsi))
-        : data.features;
+      // Filter: kota spesifik → provinsi → semua
+      const displayFeatures = filterKotaHasc
+        ? data.features.filter(f => f.properties.hasc_code === filterKotaHasc)
+        : filterProvinces.length > 0
+          ? data.features.filter(f => filterProvinces.includes(f.properties.provinsi))
+          : data.features;
 
       featureCount = displayFeatures.length;
 
@@ -461,7 +471,7 @@
             autoHighlight: true,
             highlightColor: [255, 255, 255, 60],
             updateTriggers: {
-              getFillColor: [selectedYear, filterProvinces],
+              getFillColor: [selectedYear, filterKotaHasc, filterProvinces],
             },
             // H10: Animasi transisi warna saat tahun berubah
             transitions: {
@@ -556,7 +566,12 @@
       return;
     }
     pickedFeature = null;
-    loadData();
+    if (layerMode === 'centroids') {
+      // Gunakan selectedKotaBbox untuk load awal kota spesifik
+      loadCentroids(selectedKotaBbox ?? undefined);
+    } else {
+      loadHeatmap();
+    }
   });
 
   // Reaktif: Update boundary saat selectedBoundaryHasc berubah
@@ -569,6 +584,17 @@
 <div class="relative w-full h-full">
   <!-- Map Container -->
   <div bind:this={mapContainer} class="w-full h-full"></div>
+
+  <!-- Tombol Reset Peta -->
+  <button
+    onclick={onReset}
+    title="Reset peta"
+    class="absolute top-14 left-2.5 z-10 bg-white/90 hover:bg-white text-gray-700
+           rounded-md px-2.5 py-1.5 text-xs font-semibold shadow transition-colors
+           flex items-center gap-1.5"
+  >
+    ↺ Reset
+  </button>
 
   <!-- Placeholder: tampil saat belum ada filter aktif -->
   {#if !dataEnabled && !loading}
