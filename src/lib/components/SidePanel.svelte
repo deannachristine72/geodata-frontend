@@ -11,8 +11,9 @@
     layerMode    = $bindable<LayerMode>('centroids'),
     years        = [],
     kotaList     = [],
-    topKota      = [] as KotaHeatmapProperties[],
-    stats        = null,
+    topKota        = [] as KotaHeatmapProperties[],
+    allHeatmapKota = [] as KotaHeatmapProperties[],
+    stats          = null,
     showingOnMap = 0,
     statsLoading = false,
     selectedKota = $bindable<KotaSearchItem | null>(null),
@@ -23,6 +24,7 @@
     years: YearCount[];
     kotaList: KotaSearchItem[];
     topKota: KotaHeatmapProperties[];
+    allHeatmapKota: KotaHeatmapProperties[];
     stats: StatsData | null;
     showingOnMap: number;
     statsLoading: boolean;
@@ -70,7 +72,64 @@
     selectedYear = null; // kembali ke "semua tahun"
   }
 
-  onDestroy(() => { if (playInterval) clearInterval(playInterval); });
+  // ─── C8: Chart distribusi ────────────────────────────────────────────────────
+  const maxYearCount = $derived(yearsAsc.reduce((m, y) => Math.max(m, y.count), 1));
+
+  // ─── C10: Share Link ──────────────────────────────────────────────────────────
+  let copySuccess = $state(false);
+  let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function shareLink() {
+    const params = new URLSearchParams();
+    if (selectedYear != null) params.set('year', String(selectedYear));
+    if (layerMode !== 'centroids') params.set('mode', layerMode);
+    const qs = params.toString();
+    const url = `${window.location.origin}${window.location.pathname}${qs ? '?' + qs : ''}`;
+    navigator.clipboard.writeText(url).then(() => {
+      copySuccess = true;
+      if (copyTimeout) clearTimeout(copyTimeout);
+      copyTimeout = setTimeout(() => { copySuccess = false; }, 2000);
+    }).catch(() => {});
+  }
+
+  // ─── H8: Export CSV ───────────────────────────────────────────────────────────
+  let exportLoading = $state(false);
+
+  function escapeCSV(val: string | number): string {
+    if (typeof val === 'number') return String(val);
+    if (/[",\n]/.test(val)) return `"${val.replace(/"/g, '""')}"`;
+    return val;
+  }
+
+  function exportCSV() {
+    if (allHeatmapKota.length === 0 || exportLoading) return;
+    exportLoading = true;
+    try {
+      const headers = ['hasc_code', 'kota_name', 'provinsi', 'record_count', 'total_area_km2', 'intensity'];
+      const rows = allHeatmapKota.map(k => [
+        escapeCSV(k.hasc_code),
+        escapeCSV(k.kota_name),
+        escapeCSV(k.provinsi),
+        k.record_count,
+        k.total_area_km2.toFixed(2),
+        k.intensity.toFixed(4),
+      ]);
+      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `deforestasi-kota-${selectedYear ?? 'semua'}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      exportLoading = false;
+    }
+  }
+
+  onDestroy(() => {
+    if (playInterval) clearInterval(playInterval);
+    if (copyTimeout) clearTimeout(copyTimeout);
+  });
 </script>
 
 <div class="h-full flex flex-col bg-gray-900 border-l border-gray-800">
@@ -91,11 +150,55 @@
     <!-- Stats -->
     <StatsPanel {stats} {showingOnMap} loading={statsLoading} {layerMode} />
 
+    <!-- C8: Chart distribusi event per tahun -->
+    {#if yearsAsc.length > 1}
+      <div class="border-t border-gray-800"></div>
+      <div class="space-y-1.5">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Distribusi per Tahun</span>
+        <svg
+          viewBox="0 0 {yearsAsc.length * 14} 52"
+          class="w-full"
+          style="height:3.25rem"
+          role="img"
+          aria-label="Distribusi event deforestasi per tahun"
+        >
+          {#each yearsAsc as y, i}
+            {@const barH = Math.max(2, (y.count / maxYearCount) * 44)}
+            <rect
+              x={i * 14 + 1}
+              y={52 - barH - 4}
+              width={12}
+              height={barH}
+              fill={y.year === selectedYear ? '#14b8a6' : '#374151'}
+              rx={2}
+              style="cursor:pointer;transition:fill 0.15s"
+              onclick={() => { selectedYear = y.year === selectedYear ? null : y.year; }}
+            ><title>{y.year}: {y.count.toLocaleString('id-ID')} event</title></rect>
+          {/each}
+        </svg>
+        <div class="flex justify-between text-[10px] text-gray-600 -mt-0.5">
+          <span>{yearsAsc[0].year}</span>
+          <span>{yearsAsc[yearsAsc.length - 1].year}</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- H4: Top 10 Kabupaten Terparah (heatmap mode only) -->
     {#if layerMode === 'heatmap' && topKota.length > 0}
       <div class="border-t border-gray-800"></div>
       <div class="space-y-2">
-        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Top 10 Terparah</span>
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Top 10 Terparah</span>
+          <!-- H8: Export CSV -->
+          {#if allHeatmapKota.length > 0}
+            <button
+              onclick={exportCSV}
+              disabled={exportLoading}
+              class="text-[11px] text-gray-500 hover:text-teal-400 transition-colors disabled:opacity-40"
+              title="Export semua kab/kota sebagai CSV"
+            >{exportLoading ? '…' : '↓ CSV'}</button>
+          {/if}
+        </div>
         <div class="space-y-1.5">
           {#each topKota as kota, i}
             <div class="flex items-center gap-2">
@@ -169,6 +272,18 @@
 
     <!-- View Toggle -->
     <ViewToggle bind:layerMode featureCount={showingOnMap} />
+
+    <!-- C10: Share Link -->
+    <div class="border-t border-gray-800"></div>
+    <button
+      onclick={shareLink}
+      class="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-colors
+             {copySuccess
+               ? 'bg-green-900/50 text-green-400'
+               : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}"
+    >
+      {copySuccess ? '✓ Link tersalin!' : '🔗 Salin Link'}
+    </button>
   </div>
 
   <!-- Footer / Selected Kota -->

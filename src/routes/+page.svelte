@@ -16,12 +16,20 @@
   let mapLoading   = $state(false);
   let selectedKota = $state<KotaSearchItem | null>(null);
   let selectedBoundaryHasc = $state<string | null>(null);
-  let topKota      = $state<KotaHeatmapProperties[]>([]);
+  let topKota        = $state<KotaHeatmapProperties[]>([]);
+  let allHeatmapKota = $state<KotaHeatmapProperties[]>([]);
 
   // Referensi ke MapView component untuk flyTo
   let mapView: MapView;
 
   onMount(async () => {
+    // C10: Restore state dari URL params
+    const params = new URLSearchParams(window.location.search);
+    const yearParam = params.get('year');
+    if (yearParam) { const y = parseInt(yearParam, 10); if (!isNaN(y)) selectedYear = y; }
+    const modeParam = params.get('mode');
+    if (modeParam === 'heatmap' || modeParam === 'centroids') layerMode = modeParam;
+
     // Fetch semua data startup secara paralel
     const [yearsData, kotaData] = await Promise.all([
       fetchYears().catch(() => []),
@@ -78,6 +86,7 @@
       bind:featureCount
       bind:loading={mapLoading}
       bind:topKota
+      bind:allHeatmapKota
       {selectedBoundaryHasc}
     />
   </div>
@@ -91,6 +100,7 @@
       {years}
       {kotaList}
       {topKota}
+      {allHeatmapKota}
       {stats}
       showingOnMap={featureCount}
       {statsLoading}

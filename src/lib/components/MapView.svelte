@@ -15,7 +15,8 @@
     featureCount = $bindable<number>(0),
     loading      = $bindable<boolean>(false),
     selectedBoundaryHasc = null,
-    topKota      = $bindable<KotaHeatmapProperties[]>([]),
+    topKota         = $bindable<KotaHeatmapProperties[]>([]),
+    allHeatmapKota  = $bindable<KotaHeatmapProperties[]>([]),
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
@@ -23,6 +24,7 @@
     loading: boolean;
     selectedBoundaryHasc: string | null;
     topKota: KotaHeatmapProperties[];
+    allHeatmapKota: KotaHeatmapProperties[];
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -298,8 +300,9 @@
         type: 'FeatureCollection', features: [],
       });
     }
-    hoveredKota = null; // H5: clear heatmap hover tooltip
-    topKota = [];       // H4: clear top kota list
+    hoveredKota = null;    // H5: clear heatmap hover tooltip
+    topKota = [];          // H4: clear top kota list
+    allHeatmapKota = [];   // H8: clear export data
 
     dataAbort?.abort();
     dataAbort = new AbortController();
@@ -398,6 +401,8 @@
 
       // H4: Top 10 kota terparah
       topKota = sorted.slice(0, 10).map(f => f.properties);
+      // H8: Semua data kota untuk export CSV
+      allHeatmapKota = sorted.map(f => f.properties);
 
       // H1: Update label points source — centroid tiap kota untuk zoom ≥ 7
       if (map.getSource('kota-label-points')) {
