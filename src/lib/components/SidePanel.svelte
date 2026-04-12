@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import type { KotaHeatmapProperties, KotaSearchItem, LayerMode, StatsData, YearCount } from '$lib/types';
+  import type { IslandGroup } from '$lib/islands';
   import SearchBar from './SearchBar.svelte';
   import StatsPanel from './StatsPanel.svelte';
   import YearDropdown from './YearDropdown.svelte';
@@ -31,7 +32,7 @@
     statsLoading: boolean;
     selectedKota: KotaSearchItem | null;
     selectedProvinces: string[];
-    onSelectKota: (kota: KotaSearchItem | null) => void;
+    onSelectKota: (result: KotaSearchItem | IslandGroup | null) => void;
   } = $props();
 
   // ─── C9/H10: Animasi Tahun ───────────────────────────────────────────────────
@@ -76,26 +77,6 @@
 
   // ─── C8: Chart distribusi ────────────────────────────────────────────────────
   const maxYearCount = $derived(yearsAsc.reduce((m, y) => Math.max(m, y.count), 1));
-
-  // ─── H9: Filter multi-provinsi ───────────────────────────────────────────────
-  const uniqueProvinces = $derived(
-    [...new Set(allHeatmapKota.map(k => k.provinsi))].sort()
-  );
-
-  // Reset filter saat beralih keluar dari heatmap mode
-  $effect(() => {
-    if (layerMode !== 'heatmap' && selectedProvinces.length > 0) {
-      selectedProvinces = [];
-    }
-  });
-
-  function toggleProvince(prov: string) {
-    if (selectedProvinces.includes(prov)) {
-      selectedProvinces = selectedProvinces.filter(p => p !== prov);
-    } else {
-      selectedProvinces = [...selectedProvinces, prov];
-    }
-  }
 
   // ─── C10: Share Link ──────────────────────────────────────────────────────────
   let copySuccess = $state(false);
@@ -233,37 +214,6 @@
                 {kota.record_count.toLocaleString('id-ID')}
               </span>
             </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
-
-    <!-- H9: Filter Provinsi (heatmap mode only) -->
-    {#if layerMode === 'heatmap' && uniqueProvinces.length > 0}
-      <div class="border-t border-gray-800"></div>
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filter Provinsi</span>
-          {#if selectedProvinces.length > 0}
-            <button
-              onclick={() => { selectedProvinces = []; }}
-              class="text-[11px] text-gray-500 hover:text-teal-400 transition-colors"
-            >Semua</button>
-          {/if}
-        </div>
-        <div class="space-y-1 max-h-40 overflow-y-auto pr-1">
-          {#each uniqueProvinces as prov}
-            <label class="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={selectedProvinces.includes(prov)}
-                onchange={() => toggleProvince(prov)}
-                class="accent-teal-500 shrink-0"
-              />
-              <span class="text-xs text-gray-300 group-hover:text-white transition-colors truncate">
-                {prov}
-              </span>
-            </label>
           {/each}
         </div>
       </div>

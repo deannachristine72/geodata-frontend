@@ -18,6 +18,7 @@
     topKota         = $bindable<KotaHeatmapProperties[]>([]),
     allHeatmapKota  = $bindable<KotaHeatmapProperties[]>([]),
     selectedProvinces = [] as string[],
+    dataEnabled = false,
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
@@ -27,6 +28,7 @@
     topKota: KotaHeatmapProperties[];
     allHeatmapKota: KotaHeatmapProperties[];
     selectedProvinces: string[];
+    dataEnabled: boolean;
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -131,12 +133,14 @@
         map.resize();
         addPmtilesLayer();
         addBoundarySource();
-        loadData();
+        // Tidak langsung loadData — tunggu user pilih dari search bar
+        // loadData() akan dipanggil saat dataEnabled menjadi true via $effect
       });
     });
 
     // Reload data saat viewport berubah (centroid mode)
     map.on('moveend', () => {
+      if (!dataEnabled) return;
       if (layerMode === 'heatmap') return;
       if (moveDebounce) clearTimeout(moveDebounce);
       moveDebounce = setTimeout(() => loadData(), 400);
@@ -537,9 +541,20 @@
     if (seq === lookupSeq) centroidKotaChecked = true; // tidak ditemukan
   }
 
-  // ─── Reaktif: Reload saat year atau mode berubah ──────────────────────────────
+  // ─── Reaktif: Reload saat year, mode, filter, atau dataEnabled berubah ───────
   $effect(() => {
     if (!map || !deckOverlay) return;
+    if (!dataEnabled) {
+      // Clear semua layer dan state saat data di-nonaktifkan
+      deckOverlay.setProps({ layers: [] });
+      featureCount = 0;
+      topKota = [];
+      allHeatmapKota = [];
+      hoveredKota = null;
+      hoveredCentroid = null;
+      pickedFeature = null;
+      return;
+    }
     pickedFeature = null;
     loadData();
   });
@@ -554,6 +569,18 @@
 <div class="relative w-full h-full">
   <!-- Map Container -->
   <div bind:this={mapContainer} class="w-full h-full"></div>
+
+  <!-- Placeholder: tampil saat belum ada filter aktif -->
+  {#if !dataEnabled && !loading}
+    <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+      <div class="bg-black/60 backdrop-blur-sm text-white px-6 py-4 rounded-2xl
+                  flex flex-col items-center gap-2 text-center max-w-xs shadow-2xl">
+        <span class="text-3xl">🏝</span>
+        <p class="text-sm font-semibold">Pilih pulau untuk melihat data</p>
+        <p class="text-xs text-gray-400">Gunakan search bar di panel kanan</p>
+      </div>
+    </div>
+  {/if}
 
   <!-- Loading Spinner -->
   {#if loading}
