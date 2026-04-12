@@ -1,7 +1,7 @@
 /**
- * Pemetaan pulau/kelompok kepulauan Indonesia → daftar provinsi.
- * Province names harus match persis dengan field `provinsi` dari backend API.
- * Jika filter mengembalikan 0 hasil, cek nama provinsi di backend dan sesuaikan di sini.
+ * Pemetaan pulau/kelompok kepulauan Indonesia -> daftar provinsi.
+ * Province names match persis dengan field `provinsi` dari backend API
+ * (kota_boundaries.parquet, Kepmendagri No. 300.2.2-2138 Tahun 2025).
  */
 
 export interface IslandGroup {
