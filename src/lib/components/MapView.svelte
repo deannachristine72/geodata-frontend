@@ -805,7 +805,7 @@
   <!-- H5: Tooltip hover kota heatmap — mini summary tanpa klik (M-11: clamped) -->
   {#if hoveredKota && layerMode === 'heatmap' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
-                bg-white/98 dark:bg-gray-900/95
+                bg-white dark:bg-gray-900
                 border border-gray-200 dark:border-gray-700
                 text-gray-900 dark:text-white
                 text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
@@ -819,7 +819,7 @@
   <!-- C5: Tooltip hover centroid — mini info tanpa klik (M-11: clamped) -->
   {#if hoveredCentroid && layerMode === 'centroids' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
-                bg-white/98 dark:bg-gray-900/95
+                bg-white dark:bg-gray-900
                 border border-gray-200 dark:border-gray-700
                 text-gray-900 dark:text-white
                 text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
@@ -839,14 +839,14 @@
              bottom-0 left-0 right-0 w-full rounded-t-xl
              sm:bottom-44 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl
              max-h-[50vh] overflow-y-auto
-             bg-white dark:bg-gray-900/95
+             bg-white dark:bg-gray-900
              text-gray-900 dark:text-white
-             border border-gray-200 dark:border-transparent
+             border border-gray-200 dark:border-gray-700
              shadow-xl"
     >
       <!-- Header -->
       <div class="flex items-center justify-between px-4 py-3
-                  {pickedFeature.type === 'heatmap' ? 'bg-teal-700/80' : 'bg-teal-600/80'}">
+                  {pickedFeature.type === 'heatmap' ? 'bg-teal-700' : 'bg-teal-600'}">
         <span class="font-semibold text-sm text-white">
           {#if pickedFeature.type === 'centroids'}
             Titik Deforestasi
