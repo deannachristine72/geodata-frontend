@@ -4,8 +4,8 @@ export interface PolygonProperties {
   uuid: string;
   area_km2: number;
   year: number;
-  start_date: string;
-  end_date: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface KotaHeatmapProperties {

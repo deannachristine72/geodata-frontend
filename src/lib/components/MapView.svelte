@@ -23,6 +23,7 @@
     dataEnabled = false,
     kotaList = [] as KotaSearchItem[],
     onReset = () => {},
+    isDark = false,
   }: {
     selectedYear: number | null;
     layerMode: LayerMode;
@@ -37,6 +38,7 @@
     dataEnabled: boolean;
     kotaList: KotaSearchItem[];
     onReset: () => void;
+    isDark: boolean;
   } = $props();
 
   // ─── State ──────────────────────────────────────────────────────────────────
@@ -70,9 +72,13 @@
   // Debounce timer untuk moveend
   let moveDebounce: ReturnType<typeof setTimeout> | null = null;
 
+  // B-04: Guard agar $effect basemap tidak fire saat mount pertama
+  let firstStyleRun = true;
+
   // ─── Konstanta ──────────────────────────────────────────────────────────────
-  const PMTILES_URL = 'https://deannachristine72.github.io/indonesia-pmtiles/indonesia.pmtiles';
-  const BASEMAP_STYLE = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+  const PMTILES_URL        = 'https://deannachristine72.github.io/indonesia-pmtiles/indonesia.pmtiles';
+  const BASEMAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+  const BASEMAP_STYLE_DARK  = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
   // Warna highlight centroid saat hover/klik
   const CENTROID_HIGHLIGHT: [number, number, number, number] = [255, 255, 255, 240];
@@ -84,7 +90,7 @@
 
     map = new maplibregl.Map({
       container: mapContainer,
-      style: BASEMAP_STYLE,
+      style: isDark ? BASEMAP_STYLE_DARK : BASEMAP_STYLE_LIGHT,
       center: [118.0, -2.5],
       zoom: 5,
       minZoom: 3,
@@ -113,8 +119,6 @@
               uuid: d[4],
               area_km2: d[2],
               year: d[3],
-              start_date: '',
-              end_date: '',
             } as PolygonProperties,
             coordinates: [d[0], d[1]],
           };
@@ -139,8 +143,7 @@
     map.on('load', () => {
       requestAnimationFrame(() => {
         map.resize();
-        addPmtilesLayer();
-        addBoundarySource();
+        setupMapLayers();
         // Tidak langsung loadData — tunggu user pilih dari search bar
         // loadData() akan dipanggil saat dataEnabled menjadi true via $effect
       });
@@ -166,7 +169,7 @@
   });
 
   // ─── PMTiles Layer (batas wilayah Indonesia) ─────────────────────────────────
-  function addPmtilesLayer() {
+  function addPmtilesLayer(dark = false) {
     map.addSource('indonesia-admin', {
       type: 'vector',
       url: `pmtiles://${PMTILES_URL}`,
@@ -181,7 +184,7 @@
       'source-layer': 'province',
       minzoom: 4,
       paint: {
-        'line-color': 'rgba(100,100,100,0.4)',
+        'line-color': dark ? 'rgba(200,200,200,0.45)' : 'rgba(100,100,100,0.4)',
         'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.5, 10, 1.5],
       },
     });
@@ -193,7 +196,7 @@
       'source-layer': 'regency',
       minzoom: 7,
       paint: {
-        'line-color': 'rgba(100,100,100,0.25)',
+        'line-color': dark ? 'rgba(180,180,180,0.3)' : 'rgba(100,100,100,0.25)',
         'line-width': ['interpolate', ['linear'], ['zoom'], 7, 0.3, 12, 1],
       },
     });
@@ -214,7 +217,7 @@
   }
 
   // ─── Boundary Source + Layer untuk highlight kota yang dipilih ────────────────
-  function addBoundarySource() {
+  function addBoundarySource(dark = false) {
     // Source GeoJSON kosong — diisi saat user pilih kota dari search
     map.addSource('selected-boundary', {
       type: 'geojson',
@@ -263,11 +266,17 @@
         'text-max-width': 8,
       },
       paint: {
-        'text-color': '#ffffff',
-        'text-halo-color': 'rgba(0,0,0,0.75)',
+        'text-color': dark ? '#e2e8f0' : '#1e293b',
+        'text-halo-color': dark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.9)',
         'text-halo-width': 1.5,
       },
     });
+  }
+
+  // ─── B-04: Setup semua custom layers (dipanggil saat load + saat style ganti) ──
+  function setupMapLayers() {
+    addPmtilesLayer(isDark);
+    addBoundarySource(isDark);
   }
 
   // ─── Update Boundary saat kota dipilih ───────────────────────────────────────
@@ -656,41 +665,73 @@
       updateBoundary(null); // clear
     }
   });
+
+  // B-04: Reaktif — ganti basemap style saat dark mode toggle
+  $effect(() => {
+    const dark = isDark; // track reaktif
+    if (!map || firstStyleRun) { firstStyleRun = false; return; }
+    map.setStyle(dark ? BASEMAP_STYLE_DARK : BASEMAP_STYLE_LIGHT);
+    map.once('style.load', () => {
+      setupMapLayers();
+      // Re-apply boundary setelah style reload
+      if (selectedBoundaryHasc) updateBoundary(selectedBoundaryHasc);
+      else if (selectedProvinces.length > 0) updateIslandBoundary(selectedProvinces);
+    });
+  });
 </script>
 
 <!-- ─── Template ──────────────────────────────────────────────────────────── -->
 <div class="relative w-full h-full">
-  <!-- Map Container -->
+  <!-- Map Container (B-06: touch-action handled internally by MapLibre) -->
   <div bind:this={mapContainer} class="w-full h-full"></div>
 
-  <!-- Placeholder: tampil saat belum ada filter aktif -->
+  <!-- B-01: Placeholder — light/dark adaptive -->
   {#if !dataEnabled && !loading}
     <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-      <div class="bg-black/60 backdrop-blur-sm text-white px-6 py-4 rounded-2xl
+      <div class="bg-white/90 dark:bg-black/60 backdrop-blur-sm
+                  text-gray-800 dark:text-white
+                  border border-gray-200/60 dark:border-transparent
+                  px-6 py-4 rounded-2xl
                   flex flex-col items-center gap-2 text-center max-w-xs shadow-2xl">
         <span class="text-3xl">🏝</span>
         <p class="text-sm font-semibold">Pilih pulau untuk melihat data</p>
-        <p class="text-xs text-gray-400">Gunakan search bar di atas untuk memulai</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400">Gunakan search bar di atas untuk memulai</p>
       </div>
     </div>
   {/if}
 
-  <!-- Loading Spinner -->
+  <!-- B-02: Loading Spinner — light/dark adaptive + aria-live for screen readers -->
   {#if loading}
-    <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10
-                bg-black/70 text-white text-sm px-4 py-2 rounded-full
-                flex items-center gap-2 pointer-events-none">
-      <span class="inline-block w-3 h-3 border-2 border-white border-t-transparent
+    <div role="status" aria-live="polite"
+         class="absolute top-4 left-1/2 -translate-x-1/2 z-10
+                bg-white/95 dark:bg-black/70
+                text-gray-700 dark:text-white
+                border border-gray-200 dark:border-transparent
+                text-sm px-4 py-2 rounded-full shadow-md dark:shadow-none
+                flex items-center gap-2 pointer-events-none backdrop-blur-sm">
+      <span class="inline-block w-3 h-3 border-2
+                   border-gray-500 dark:border-white border-t-transparent
                    rounded-full animate-spin"></span>
       Memuat data...
     </div>
   {/if}
 
-  <!-- Error Message -->
+  <!-- B-03: Error Message — light/dark adaptive + dismiss button -->
   {#if errorMsg}
-    <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10
-                bg-red-900/90 text-white text-sm px-4 py-2 rounded-lg max-w-xs text-center">
-      {errorMsg}
+    <div role="alert" aria-live="assertive"
+         class="absolute top-4 left-1/2 -translate-x-1/2 z-10
+                bg-red-50 dark:bg-red-900/90
+                text-red-700 dark:text-white
+                border border-red-200 dark:border-transparent
+                text-sm px-4 py-2 rounded-lg max-w-xs text-center shadow-md
+                flex items-center gap-2">
+      <span class="flex-1">{errorMsg}</span>
+      <button
+        onclick={() => (errorMsg = null)}
+        aria-label="Tutup pesan error"
+        class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-white
+               transition-colors ml-1 leading-none text-base flex-shrink-0"
+      >✕</button>
     </div>
   {/if}
 

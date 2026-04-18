@@ -337,6 +337,7 @@
         {selectedKotaBbox}
         {dataEnabled}
         {kotaList}
+        {isDark}
         onReset={handleReset}
       />
 
