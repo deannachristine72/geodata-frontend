@@ -4,9 +4,9 @@
  * Output: RGBA tuple untuk deck.gl
  */
 
-// Palet warna: hijau (rendah) → kuning → oranye → merah (tinggi)
+// Palet warna: teal (rendah) → kuning → oranye → merah (tinggi)
 const COLOR_STOPS: Array<[number, [number, number, number]]> = [
-  [0.0,  [34,  139, 34]],    // forest green — tidak ada/sangat sedikit
+  [0.0,  [13,  148, 136]],   // teal-600 — tidak ada/sangat sedikit
   [0.25, [154, 205, 50]],    // yellow-green
   [0.5,  [255, 200, 0]],     // kuning
   [0.75, [255, 100, 0]],     // oranye
@@ -63,7 +63,7 @@ export function centroidSeverityColor(area_km2: number, alpha = 200): [number, n
 
 // H2: Kelas legend heatmap dengan nilai aktual record_count
 export const HEATMAP_LEGEND_CLASSES = [
-  { label: '< 100 event',     color: '#228b22', desc: 'Rendah'        },
+  { label: '< 100 event',     color: '#0d9488', desc: 'Rendah'        },
   { label: '100–500 event',   color: '#ffc800', desc: 'Sedang'        },
   { label: '500–2.000 event', color: '#ff6400', desc: 'Tinggi'        },
   { label: '> 2.000 event',   color: '#c80000', desc: 'Sangat Tinggi' },
