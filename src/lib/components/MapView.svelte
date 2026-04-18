@@ -940,13 +940,14 @@
             <span class="text-gray-500 dark:text-gray-400">Total Luas</span>
             <span>{(p.total_area_km2 / 1000).toLocaleString('id-ID', { maximumFractionDigits: 1 })} ribu km²</span>
           </div>
-          <!-- Intensity bar -->
+          <!-- Intensity bar — warna dari intensityToRgba agar konsisten dengan peta -->
           <div class="mt-2">
             <div class="text-gray-500 dark:text-gray-400 text-xs mb-1">Intensitas Deforestasi</div>
             <div class="w-full h-2 rounded bg-gray-200 dark:bg-gray-700">
+              {@const barRgb = intensityToRgba(p.intensity, 255)}
               <div
                 class="h-2 rounded"
-                style="width:{(p.intensity * 100).toFixed(1)}%; background: rgb({Math.round(255 * p.intensity)},{Math.round(120 * (1 - p.intensity))},30)"
+                style="width:{(p.intensity * 100).toFixed(1)}%; background: rgb({barRgb[0]},{barRgb[1]},{barRgb[2]})"
               ></div>
             </div>
             <div class="text-right text-xs text-gray-500 dark:text-gray-400 mt-0.5">{(p.intensity * 100).toFixed(1)}%</div>
