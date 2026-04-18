@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { fly } from 'svelte/transition';
   import maplibregl from 'maplibre-gl';
   import { Protocol } from 'pmtiles';
   import { MapboxOverlay } from '@deck.gl/mapbox';
@@ -62,9 +63,12 @@
   let hoveredCentroid = $state<{ x: number; y: number; area: number; year: number } | null>(null);
 
   // C6: Admin context (point-in-polygon lookup terhadap heatmap cache)
-  let centroidKotaContext = $state<{ kota_name: string; provinsi: string } | null>(null);
+  let centroidKotaContext = $state<{ kota_name: string; provinsi: string; kota_type?: string } | null>(null);
   let centroidKotaChecked = $state(false); // true = lookup selesai (context null = tidak ditemukan)
   let lookupSeq = 0;                        // guard race condition rapid click
+
+  // M-05: Retry function — disimpan saat fetch gagal
+  let retryFn = $state<(() => void) | null>(null);
 
   // AbortController untuk membatalkan fetch yang sudah tidak relevan
   let dataAbort: AbortController | null = null;
@@ -261,14 +265,15 @@
       minzoom: 7,
       layout: {
         'text-field': ['get', 'kota_name'],
-        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 9, 12, 12],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 7, 11, 10, 12, 12, 14],
         'text-anchor': 'center',
-        'text-max-width': 8,
+        'text-max-width': 10,
+        'text-letter-spacing': 0.02,
       },
       paint: {
         'text-color': dark ? '#e2e8f0' : '#1e293b',
-        'text-halo-color': dark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.9)',
-        'text-halo-width': 1.5,
+        'text-halo-color': dark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.95)',
+        'text-halo-width': 2,
       },
     });
   }
@@ -298,6 +303,7 @@
       );
     } catch (err) {
       console.error('Gagal memuat boundary kota:', err);
+      errorMsg = 'Batas wilayah tidak dapat dimuat — coba geser peta lalu pilih ulang.';
     }
   }
 
@@ -334,6 +340,7 @@
       });
     } catch (err) {
       console.error('Gagal memuat boundary pulau:', err);
+      errorMsg = 'Batas wilayah pulau tidak dapat dimuat.';
     }
   }
 
@@ -341,6 +348,31 @@
   export function flyTo(center: [number, number], zoom = 10) {
     if (!map) return;
     map.flyTo({ center, zoom, duration: 1500 });
+  }
+
+  // ─── M-09: Zoom to Fit — fit peta ke batas feature yang sedang dipilih ───────
+  function zoomToPickedFeature() {
+    if (!map || !pickedFeature) return;
+    if (pickedFeature.type === 'heatmap') {
+      const p = pickedFeature.properties as KotaHeatmapProperties;
+      const kota = kotaList.find(k => k.hasc_code === p.hasc_code);
+      if (kota) {
+        map.fitBounds(kota.bbox as maplibregl.LngLatBoundsLike, { padding: 60, duration: 800 });
+      } else {
+        map.flyTo({ center: pickedFeature.coordinates, zoom: 10, duration: 800 });
+      }
+    } else {
+      map.flyTo({ center: pickedFeature.coordinates, zoom: 13, duration: 800 });
+    }
+  }
+
+  // ─── M-11: Clamp tooltip position agar tidak keluar layar ────────────────────
+  function clampTooltipStyle(x: number, y: number, w = 185, h = 74): string {
+    const mw = mapContainer?.clientWidth  ?? 9999;
+    const mh = mapContainer?.clientHeight ?? 9999;
+    const left = Math.min(Math.max(4, x + 14), mw - w - 4);
+    const top  = Math.min(Math.max(4, y - h),  mh - h - 4);
+    return `left: ${left}px; top: ${top}px;`;
   }
 
   // ─── Load Data Berdasarkan Mode (digunakan oleh moveend) ─────────────────────
@@ -408,6 +440,7 @@
 
     loading = true;
     errorMsg = null;
+    retryFn = null;
 
     try {
       const data = await fetchCentroids(params, dataAbort.signal);
@@ -452,7 +485,9 @@
       });
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
-        errorMsg = 'Gagal memuat data centroid. Periksa backend FastAPI.';
+        const capturedBbox = activeBbox;
+        errorMsg = 'Gagal memuat data titik deforestasi.';
+        retryFn  = () => loadCentroids(capturedBbox);
         console.error(err);
       }
     } finally {
@@ -476,6 +511,7 @@
 
     loading = true;
     errorMsg = null;
+    retryFn = null;
 
     try {
       if (!heatmapCache[cacheKey]) {
@@ -560,7 +596,8 @@
         ],
       });
     } catch (err: unknown) {
-      errorMsg = 'Gagal memuat data heatmap. Periksa backend FastAPI.';
+      errorMsg = 'Gagal memuat data peta panas.';
+      retryFn  = () => loadHeatmap();
       console.error(err);
     } finally {
       loading = false;
@@ -621,7 +658,13 @@
       }
       if (found) {
         if (seq === lookupSeq) {
-          centroidKotaContext = { kota_name: feature.properties.kota_name, provinsi: feature.properties.provinsi };
+          // M-02: tambah kota_type dari kotaList via hasc_code
+          const kotaItem = kotaList.find(k => k.hasc_code === feature.properties.hasc_code);
+          centroidKotaContext = {
+            kota_name: feature.properties.kota_name,
+            provinsi:  feature.properties.provinsi,
+            kota_type: kotaItem?.kota_type,
+          };
           centroidKotaChecked = true;
         }
         return;
@@ -682,8 +725,9 @@
 
 <!-- ─── Template ──────────────────────────────────────────────────────────── -->
 <div class="relative w-full h-full">
-  <!-- Map Container (B-06: touch-action handled internally by MapLibre) -->
-  <div bind:this={mapContainer} class="w-full h-full"></div>
+  <!-- Map Container (M-13: aria-label for screen readers) -->
+  <div bind:this={mapContainer} class="w-full h-full"
+       role="application" aria-label="Peta Kejadian Deforestasi Indonesia"></div>
 
   <!-- B-01: Placeholder — light/dark adaptive -->
   {#if !dataEnabled && !loading}
@@ -716,22 +760,30 @@
     </div>
   {/if}
 
-  <!-- B-03: Error Message — light/dark adaptive + dismiss button -->
+  <!-- B-03 + M-05: Error Message — light/dark adaptive, retry + dismiss -->
   {#if errorMsg}
     <div role="alert" aria-live="assertive"
          class="absolute top-4 left-1/2 -translate-x-1/2 z-10
                 bg-red-50 dark:bg-red-900/90
                 text-red-700 dark:text-white
                 border border-red-200 dark:border-transparent
-                text-sm px-4 py-2 rounded-lg max-w-xs text-center shadow-md
-                flex items-center gap-2">
-      <span class="flex-1">{errorMsg}</span>
-      <button
-        onclick={() => (errorMsg = null)}
-        aria-label="Tutup pesan error"
-        class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-white
-               transition-colors ml-1 leading-none text-base flex-shrink-0"
-      >✕</button>
+                text-sm px-4 py-2 rounded-lg max-w-xs text-center shadow-md">
+      <div class="flex items-center gap-2">
+        <span class="flex-1 text-left">{errorMsg}</span>
+        <button
+          onclick={() => { errorMsg = null; retryFn = null; }}
+          aria-label="Tutup pesan error"
+          class="text-red-400 dark:text-red-300 hover:text-red-600 dark:hover:text-white
+                 transition-colors leading-none text-base flex-shrink-0"
+        >✕</button>
+      </div>
+      {#if retryFn}
+        <button
+          onclick={() => { retryFn?.(); retryFn = null; errorMsg = null; }}
+          class="mt-1.5 text-xs font-medium underline underline-offset-2
+                 text-red-600 dark:text-red-300 hover:no-underline transition-colors"
+        >↻ Coba lagi</button>
+      {/if}
     </div>
   {/if}
 
@@ -748,28 +800,28 @@
     </div>
   {/if}
 
-  <!-- H5: Tooltip hover kota heatmap — mini summary tanpa klik -->
+  <!-- H5: Tooltip hover kota heatmap — mini summary tanpa klik (M-11: clamped) -->
   {#if hoveredKota && layerMode === 'heatmap' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
                 bg-white/98 dark:bg-gray-900/95
                 border border-gray-200 dark:border-gray-700
                 text-gray-900 dark:text-white
                 text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
-         style="left: {hoveredKota.x + 14}px; top: {Math.max(4, hoveredKota.y - 64)}px;">
+         style={clampTooltipStyle(hoveredKota.x, hoveredKota.y, 185, 68)}>
       <div class="font-semibold text-teal-600 dark:text-teal-300">{hoveredKota.kota_name}</div>
       <div class="text-gray-500 dark:text-gray-400 text-[10px]">{hoveredKota.provinsi}</div>
       <div class="text-orange-500 dark:text-orange-300 font-medium mt-0.5">{hoveredKota.record_count.toLocaleString('id-ID')} event</div>
     </div>
   {/if}
 
-  <!-- C5: Tooltip hover centroid — mini info tanpa klik -->
+  <!-- C5: Tooltip hover centroid — mini info tanpa klik (M-11: clamped) -->
   {#if hoveredCentroid && layerMode === 'centroids' && !pickedFeature}
     <div class="absolute z-20 pointer-events-none
                 bg-white/98 dark:bg-gray-900/95
                 border border-gray-200 dark:border-gray-700
                 text-gray-900 dark:text-white
                 text-xs px-2.5 py-1.5 rounded-lg shadow-xl"
-         style="left: {hoveredCentroid.x + 14}px; top: {Math.max(4, hoveredCentroid.y - 52)}px;">
+         style={clampTooltipStyle(hoveredCentroid.x, hoveredCentroid.y, 150, 50)}>
       <div class="font-semibold text-teal-600 dark:text-teal-300">
         {hoveredCentroid.area.toLocaleString('id-ID', { maximumFractionDigits: 2 })} km²
       </div>
@@ -777,27 +829,51 @@
     </div>
   {/if}
 
-  <!-- Info Panel — Klik Feature -->
+  <!-- Info Panel — Klik Feature (M-04: fly transition, M-10: bottom offset) -->
   {#if pickedFeature}
-    <div class="absolute z-10 bottom-0 left-0 right-0 w-full rounded-t-xl sm:bottom-14 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl max-h-[50vh] overflow-y-auto
-                bg-white dark:bg-gray-900/95
-                text-gray-900 dark:text-white
-                border border-gray-200 dark:border-transparent
-                shadow-xl">
+    <div
+      transition:fly={{ y: 24, duration: 220, opacity: 0 }}
+      class="absolute z-10
+             bottom-0 left-0 right-0 w-full rounded-t-xl
+             sm:bottom-44 sm:left-4 sm:right-auto sm:w-72 sm:rounded-xl
+             max-h-[50vh] overflow-y-auto
+             bg-white dark:bg-gray-900/95
+             text-gray-900 dark:text-white
+             border border-gray-200 dark:border-transparent
+             shadow-xl"
+    >
       <!-- Header -->
       <div class="flex items-center justify-between px-4 py-3
                   {pickedFeature.type === 'heatmap' ? 'bg-teal-700/80' : 'bg-teal-600/80'}">
-        <span class="font-semibold text-sm">
+        <span class="font-semibold text-sm text-white">
           {#if pickedFeature.type === 'centroids'}
             Titik Deforestasi
           {:else}
             Kabupaten / Kota
           {/if}
         </span>
-        <button
-          class="text-white/70 hover:text-white text-lg leading-none"
-          onclick={() => (pickedFeature = null)}
-        >×</button>
+        <!-- M-09: Zoom to fit + M-12: aria-label on close -->
+        <div class="flex items-center gap-1">
+          <button
+            onclick={zoomToPickedFeature}
+            aria-label="Zoom ke lokasi ini"
+            title="Zoom ke lokasi"
+            class="text-white/70 hover:text-white transition-colors p-0.5 rounded"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="11" y1="8" x2="11" y2="14"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
+          <button
+            onclick={() => (pickedFeature = null)}
+            aria-label="Tutup panel detail"
+            class="text-white/70 hover:text-white text-lg leading-none transition-colors px-0.5"
+          >×</button>
+        </div>
       </div>
 
       <!-- Properties -->
@@ -814,6 +890,12 @@
               <span class="text-gray-500 dark:text-gray-400">Kota/Kab</span>
               <span class="font-semibold text-teal-600 dark:text-teal-300 text-right max-w-[60%] leading-tight">{centroidKotaContext.kota_name}</span>
             </div>
+            {#if centroidKotaContext.kota_type}
+              <div class="flex justify-between">
+                <span class="text-gray-500 dark:text-gray-400">Tipe</span>
+                <span class="text-xs text-gray-600 dark:text-gray-300">{centroidKotaContext.kota_type}</span>
+              </div>
+            {/if}
           {:else if !centroidKotaChecked}
             <div class="text-gray-400 dark:text-gray-500 text-xs italic">Mencari lokasi…</div>
           {:else}
